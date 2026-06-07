@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+
+  # ============================================================
+  # PostgreSQL Database
+  # ============================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: cbs_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       core_banking
+      POSTGRES_USER:     bankadmin
+      POSTGRES_PASSWORD: bankpass123
+    ports:
+      - "5433:5432"   # 5433 on Mac → 5432 inside container
+                      # avoid conflict with your installed PostgreSQL
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./traditional-api/src/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bankadmin -d core_banking"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # Traditional CBS — Node.js
+  # ============================================================
+  traditional-api:
+    build:
+      context: ./traditional-api
+      dockerfile: Dockerfile
+    container_name: cbs_traditional_api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT:            3000
+      NODE_ENV:        production
+      DB_HOST:         postgres        # container name = hostname
+      DB_PORT:         5432
+      DB_NAME:         core_banking
+      DB_USER:         bankadmin
+      DB_PASSWORD:     bankpass123
+      JWT_SECRET:      my_super_secret_jwt_key_123
+      JWT_EXPIRES_IN:  24h
+      BANK_NAME:       MyBank
+      CURRENCY:        USD
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ============================================================
+  # Spring Boot API Gateway
+  # ============================================================
+  banking-gateway:
+    build:
+      context: ./banking-gateway
+      dockerfile: Dockerfile
+    container_name: cbs_banking_gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT:                    8080
+      CBS_TRADITIONAL_BASE_URL:       http://traditional-api:3000/api/v1
+      CBS_BLOCKCHAIN_BASE_URL:        http://blockchain-api:3001/api/v1
+      JWT_SECRET:                     my_spring_gateway_super_secret_key_change_in_production_2026
+      JWT_EXPIRATION:                 86400000
+      SPRING_SECURITY_USER_NAME:      admin
+      SPRING_SECURITY_USER_PASSWORD:  admin
+    depends_on:
+      traditional-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+# ============================================================
+# Volumes — persistent data storage
+# ============================================================
+volumes:
+  postgres_data:
+    driver: local

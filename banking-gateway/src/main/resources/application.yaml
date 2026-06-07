@@ -1,0 +1,37 @@
+server:
+  port: ${SERVER_PORT:8080}
+  address: 0.0.0.0
+
+spring:
+  application:
+    name: banking-gateway
+  security:
+    user:
+      name: ${SPRING_SECURITY_USER_NAME:admin}
+      password: ${SPRING_SECURITY_USER_PASSWORD:admin}
+
+cbs:
+  traditional:
+    base-url: ${CBS_TRADITIONAL_BASE_URL:http://localhost:3000/api/v1}
+  blockchain:
+    base-url: ${CBS_BLOCKCHAIN_BASE_URL:http://localhost:3001/api/v1}
+
+jwt:
+  secret: ${JWT_SECRET:my_spring_gateway_super_secret_key_change_in_production_2026}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+logging:
+  level:
+    com.corebanking: DEBUG
+    org.springframework.security: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
